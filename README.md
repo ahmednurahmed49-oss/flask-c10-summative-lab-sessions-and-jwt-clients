@@ -21,8 +21,8 @@ python seed.py
 
 The seed script creates sample data. For the demo account, use:
 
-- Username: `demo`
-- Password: `password123`
+- Username: `Peter`
+- Password: `TONKATONKA`
 
 ## Run the app
 
