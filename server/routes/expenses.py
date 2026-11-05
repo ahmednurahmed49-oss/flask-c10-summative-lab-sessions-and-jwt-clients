@@ -1,4 +1,5 @@
 from datetime import date
+from math import isfinite
 
 from flask import request
 from flask_restful import Resource
@@ -8,101 +9,166 @@ from config import db
 from models import Expense
 
 
+def error_response(message, status):
+    return {"errors": [message]}, status
+
+
 def current_user_id():
-    """Return the logged-in user's id from the JWT."""
     return int(get_jwt_identity())
 
 
 def get_own_expense(expense_id):
-    """Find an expense only if it belongs to the logged-in user."""
-    return Expense.query.filter_by(id=expense_id, user_id=current_user_id()).first()
+    """Only return an expense belonging to the authenticated user."""
+    return Expense.query.filter_by(
+        id=expense_id,
+        user_id=current_user_id()
+    ).first()
 
 
 def parse_fields(data, partial=False):
-    """Validate input. Returns (clean_data, error_message)."""
+    """Validate expense input and return (clean_data, error_message)."""
+    if not isinstance(data, dict):
+        return None, "A valid JSON object is required."
+
     clean = {}
 
     if "title" in data or not partial:
-        title = (data.get("title") or "").strip()
-        if not title:
-            return None, "Title is required"
-        clean["title"] = title
+        title = data.get("title")
+
+        if not isinstance(title, str) or not title.strip():
+            return None, "A valid title is required."
+
+        clean["title"] = title.strip()
 
     if "amount" in data or not partial:
+        amount = data.get("amount")
+
+        if isinstance(amount, bool):
+            return None, "Amount must be a number."
+
         try:
-            amount = float(data.get("amount"))
+            amount = float(amount)
         except (TypeError, ValueError):
-            return None, "Amount must be a number"
-        if amount <= 0:
-            return None, "Amount must be greater than 0"
+            return None, "Amount must be a number."
+
+        if not isfinite(amount) or amount <= 0:
+            return None, "Amount must be greater than zero."
+
         clean["amount"] = amount
 
     if "category" in data:
-        clean["category"] = data.get("category")
+        category = data["category"]
+
+        if category is not None and not isinstance(category, str):
+            return None, "Category must be text or null."
+
+        clean["category"] = category.strip() if category else None
 
     if "date" in data:
         try:
+            if not isinstance(data["date"], str):
+                raise ValueError
+
             clean["date"] = date.fromisoformat(data["date"])
         except (TypeError, ValueError):
-            return None, "Date must be in YYYY-MM-DD format"
+            return None, "Date must use YYYY-MM-DD format."
+
+    if partial and not clean:
+        return None, "Provide at least one field to update."
 
     return clean, None
 
 
 class ExpenseList(Resource):
+
     @jwt_required()
     def get(self):
         page = max(request.args.get("page", 1, type=int), 1)
-        per_page = min(max(request.args.get("per_page", 10, type=int), 1), 100)
+        per_page = min(
+            max(request.args.get("per_page", 10, type=int), 1),
+            100
+        )
 
         pagination = (
-            Expense.query.filter_by(user_id=current_user_id())
+            Expense.query
+            .filter_by(user_id=current_user_id())
             .order_by(Expense.date.desc(), Expense.id.desc())
-            .paginate(page=page, per_page=per_page, error_out=False)
+            .paginate(
+                page=page,
+                per_page=per_page,
+                error_out=False
+            )
         )
 
         return {
-            "expenses": [e.to_dict() for e in pagination.items],
+            "expenses": [
+                expense.to_dict()
+                for expense in pagination.items
+            ],
             "page": pagination.page,
             "per_page": per_page,
             "total": pagination.total,
-            "pages": pagination.pages,
+            "pages": pagination.pages
         }, 200
 
     @jwt_required()
     def post(self):
-        clean, error = parse_fields(request.get_json() or {})
-        if error:
-            return {"error": error}, 422
+        data = request.get_json(silent=True)
+        clean, error = parse_fields(data)
 
-        expense = Expense(user_id=current_user_id(), **clean)
+        if error:
+            return error_response(error, 422)
+
+        expense = Expense(
+            user_id=current_user_id(),
+            **clean
+        )
+
         db.session.add(expense)
         db.session.commit()
+
         return expense.to_dict(), 201
 
 
 class ExpenseDetail(Resource):
+
+    @jwt_required()
+    def get(self, id):
+        expense = get_own_expense(id)
+
+        if not expense:
+            return error_response("Expense not found.", 404)
+
+        return expense.to_dict(), 200
+
     @jwt_required()
     def patch(self, id):
         expense = get_own_expense(id)
-        if not expense:
-            return {"error": "Expense not found"}, 404
 
-        clean, error = parse_fields(request.get_json() or {}, partial=True)
+        if not expense:
+            return error_response("Expense not found.", 404)
+
+        data = request.get_json(silent=True)
+        clean, error = parse_fields(data, partial=True)
+
         if error:
-            return {"error": error}, 422
+            return error_response(error, 422)
 
         for field, value in clean.items():
             setattr(expense, field, value)
+
         db.session.commit()
+
         return expense.to_dict(), 200
 
     @jwt_required()
     def delete(self, id):
         expense = get_own_expense(id)
+
         if not expense:
-            return {"error": "Expense not found"}, 404
+            return error_response("Expense not found.", 404)
 
         db.session.delete(expense)
         db.session.commit()
+
         return {}, 204
