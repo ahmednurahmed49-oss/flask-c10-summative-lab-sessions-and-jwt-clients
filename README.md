@@ -170,7 +170,7 @@ The response includes:
 - `total`
 - `pages`
 
-Note: The current React frontend's expense entries are managed in frontend state. The backend expense API supports database persistence, but the frontend expense interface still needs to be connected to these endpoints for expenses to persist through the UI.
+The React frontend is connected to the Flask expense API. Authenticated users can create and view their expenses through the interface. Expense records are stored in the database and remain available after logging out and signing in again.
 
 ## Data Models
 
