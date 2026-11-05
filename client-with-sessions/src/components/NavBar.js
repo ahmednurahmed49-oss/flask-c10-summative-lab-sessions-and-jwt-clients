@@ -1,5 +1,4 @@
 import React from "react";
-import { Link } from "react-router-dom";
 import styled from "styled-components";
 import { Button } from "../styles";
 
@@ -14,13 +13,10 @@ function NavBar({ user, setUser }) {
 
   return (
     <Wrapper>
-      <Logo>
-        <Link to="/">My App</Link>
-      </Logo>
+      <Logo>Expense Tracker</Logo>
+
       <Nav>
-        <Button>
-          Do Something
-        </Button>
+        <Welcome>Welcome, {user.username}</Welcome>
         <Button variant="outline" onClick={handleLogoutClick}>
           Logout
         </Button>
@@ -31,29 +27,28 @@ function NavBar({ user, setUser }) {
 
 const Wrapper = styled.header`
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
-  padding: 8px;
+  padding: 20px 35px;
+  background: #101c3a;
+  color: white;
 `;
 
 const Logo = styled.h1`
-  font-family: "Permanent Marker", cursive;
-  font-size: 3rem;
-  color: deeppink;
+  font-size: 25px;
   margin: 0;
-  line-height: 1;
-
-  a {
-    color: inherit;
-    text-decoration: none;
-  }
+  color: white;
 `;
 
 const Nav = styled.nav`
   display: flex;
-  gap: 4px;
-  position: absolute;
-  right: 8px;
+  align-items: center;
+  gap: 20px;
+`;
+
+const Welcome = styled.span`
+  font-size: 14px;
+  color: #dbe4ff;
 `;
 
 export default NavBar;
