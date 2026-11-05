@@ -22,7 +22,7 @@ app.config["JWT_SECRET_KEY"] = os.environ.get(
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = 3600
 
 # Database settings
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", "sqlite:///app.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 app.json.compact = False

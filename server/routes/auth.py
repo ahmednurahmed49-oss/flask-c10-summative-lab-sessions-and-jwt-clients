@@ -1,4 +1,4 @@
-from flask import request
+from flask import request, session
 from flask_restful import Resource
 from flask_jwt_extended import (
     create_access_token,
@@ -14,6 +14,21 @@ from models import User, TokenBlocklist
 
 def error_response(message, status):
     return {"errors": [message]}, status
+
+
+def authentication_response(user, status):
+    """Return data in a format accepted by both existing frontends."""
+    token = create_access_token(identity=str(user.id))
+    user_data = user.to_dict()
+
+    session.clear()
+    session["user_id"] = user.id
+
+    return {
+        **user_data,
+        "token": token,
+        "user": user_data
+    }, status
 
 
 class Signup(Resource):
@@ -49,12 +64,7 @@ class Signup(Resource):
             db.session.rollback()
             return error_response("Username is already taken.", 409)
 
-        token = create_access_token(identity=str(user.id))
-
-        return {
-            "token": token,
-            "user": user.to_dict()
-        }, 201
+        return authentication_response(user, 201)
 
 
 class Login(Resource):
@@ -75,12 +85,23 @@ class Login(Resource):
         if not user or not user.authenticate(password):
             return error_response("Invalid username or password.", 401)
 
-        token = create_access_token(identity=str(user.id))
+        return authentication_response(user, 200)
 
-        return {
-            "token": token,
-            "user": user.to_dict()
-        }, 200
+
+class CheckSession(Resource):
+    def get(self):
+        user_id = session.get("user_id")
+
+        if not user_id:
+            return {}, 200
+
+        user = db.session.get(User, user_id)
+
+        if not user:
+            session.clear()
+            return {}, 200
+
+        return user.to_dict(), 200
 
 
 class Me(Resource):
@@ -96,15 +117,16 @@ class Me(Resource):
 
 
 class Logout(Resource):
-    @jwt_required()
+    @jwt_required(optional=True)
     def delete(self):
         token_data = get_jwt()
 
-        revoked_token = TokenBlocklist(
-            jti=token_data["jti"]
-        )
+        if token_data and token_data.get("jti"):
+            revoked_token = TokenBlocklist(jti=token_data["jti"])
+            db.session.add(revoked_token)
+            db.session.commit()
+        elif not session.get("user_id"):
+            return error_response("Authentication required.", 401)
 
-        db.session.add(revoked_token)
-        db.session.commit()
-
+        session.clear()
         return {}, 204

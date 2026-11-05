@@ -6,8 +6,6 @@ from models import User, Expense
 
 def seed_data():
     with app.app_context():
-        db.create_all()
-
         sample_users = [
             {
                 "username": "alice",

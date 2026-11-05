@@ -5,27 +5,6 @@ from config import db
 from models import User, Expense
 
 
-@pytest.fixture
-def client(tmp_path):
-    database_path = tmp_path / "test.db"
-
-    app.config.update(
-        TESTING=True,
-        SQLALCHEMY_DATABASE_URI=f"sqlite:///{database_path}",
-        JWT_SECRET_KEY="test-secret-key",
-    )
-
-    with app.app_context():
-        db.session.remove()
-        db.drop_all()
-        db.create_all()
-
-        yield app.test_client()
-
-        db.session.remove()
-        db.drop_all()
-
-
 def register(client, username="testuser", password="password123"):
     return client.post(
         "/signup",
