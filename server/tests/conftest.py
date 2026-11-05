@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-# Set this BEFORE importing the Flask application and initializing SQLAlchemy.
+# Keep test data separate from the real application database.
 os.environ["DATABASE_URL"] = "sqlite:////tmp/flask-c10-summative-tests.db"
 
 SERVER_DIRECTORY = Path(__file__).resolve().parents[1]
@@ -20,7 +20,7 @@ from config import db
 def client():
     app.config.update(
         TESTING=True,
-        JWT_SECRET_KEY="test-secret-key",
+        SECRET_KEY="test-secret-key",
     )
 
     with app.app_context():

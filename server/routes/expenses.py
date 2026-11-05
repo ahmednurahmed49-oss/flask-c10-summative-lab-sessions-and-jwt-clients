@@ -1,9 +1,8 @@
 from datetime import date
 from math import isfinite
 
-from flask import request
+from flask import request, session
 from flask_restful import Resource
-from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from config import db
 from models import Expense
@@ -14,11 +13,10 @@ def error_response(message, status):
 
 
 def current_user_id():
-    return int(get_jwt_identity())
+    return session.get("user_id")
 
 
 def get_own_expense(expense_id):
-    """Only return an expense belonging to the authenticated user."""
     return Expense.query.filter_by(
         id=expense_id,
         user_id=current_user_id()
@@ -26,7 +24,6 @@ def get_own_expense(expense_id):
 
 
 def parse_fields(data, partial=False):
-    """Validate expense input and return (clean_data, error_message)."""
     if not isinstance(data, dict):
         return None, "A valid JSON object is required."
 
@@ -81,8 +78,12 @@ def parse_fields(data, partial=False):
 
 class ExpenseList(Resource):
 
-    @jwt_required()
     def get(self):
+        user_id = current_user_id()
+
+        if not user_id:
+            return error_response("Authentication required.", 401)
+
         page = max(request.args.get("page", 1, type=int), 1)
         per_page = min(
             max(request.args.get("per_page", 10, type=int), 1),
@@ -91,7 +92,7 @@ class ExpenseList(Resource):
 
         pagination = (
             Expense.query
-            .filter_by(user_id=current_user_id())
+            .filter_by(user_id=user_id)
             .order_by(Expense.date.desc(), Expense.id.desc())
             .paginate(
                 page=page,
@@ -111,18 +112,19 @@ class ExpenseList(Resource):
             "pages": pagination.pages
         }, 200
 
-    @jwt_required()
     def post(self):
+        user_id = current_user_id()
+
+        if not user_id:
+            return error_response("Authentication required.", 401)
+
         data = request.get_json(silent=True)
         clean, error = parse_fields(data)
 
         if error:
             return error_response(error, 422)
 
-        expense = Expense(
-            user_id=current_user_id(),
-            **clean
-        )
+        expense = Expense(user_id=user_id, **clean)
 
         db.session.add(expense)
         db.session.commit()
@@ -132,8 +134,10 @@ class ExpenseList(Resource):
 
 class ExpenseDetail(Resource):
 
-    @jwt_required()
     def get(self, id):
+        if not current_user_id():
+            return error_response("Authentication required.", 401)
+
         expense = get_own_expense(id)
 
         if not expense:
@@ -141,8 +145,10 @@ class ExpenseDetail(Resource):
 
         return expense.to_dict(), 200
 
-    @jwt_required()
     def patch(self, id):
+        if not current_user_id():
+            return error_response("Authentication required.", 401)
+
         expense = get_own_expense(id)
 
         if not expense:
@@ -161,8 +167,10 @@ class ExpenseDetail(Resource):
 
         return expense.to_dict(), 200
 
-    @jwt_required()
     def delete(self, id):
+        if not current_user_id():
+            return error_response("Authentication required.", 401)
+
         expense = get_own_expense(id)
 
         if not expense:

@@ -103,10 +103,3 @@ class Expense(db.Model):
             "date": self.date.isoformat() if self.date else None,
             "user_id": self.user_id
         }
-
-
-class TokenBlocklist(db.Model):
-    __tablename__ = "token_blocklist"
-
-    jti = db.Column(db.String(36), primary_key=True)
-    created_at = db.Column(db.DateTime, server_default=db.func.now())

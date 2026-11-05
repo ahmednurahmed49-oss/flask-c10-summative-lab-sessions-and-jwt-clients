@@ -1,34 +1,19 @@
 from flask import request, session
 from flask_restful import Resource
-from flask_jwt_extended import (
-    create_access_token,
-    jwt_required,
-    get_jwt_identity,
-    get_jwt
-)
 from sqlalchemy.exc import IntegrityError
 
 from config import db
-from models import User, TokenBlocklist
+from models import User
 
 
 def error_response(message, status):
     return {"errors": [message]}, status
 
 
-def authentication_response(user, status):
-    """Return data in a format accepted by both existing frontends."""
-    token = create_access_token(identity=str(user.id))
-    user_data = user.to_dict()
-
+def establish_session(user):
     session.clear()
     session["user_id"] = user.id
-
-    return {
-        **user_data,
-        "token": token,
-        "user": user_data
-    }, status
+    return user.to_dict()
 
 
 class Signup(Resource):
@@ -64,7 +49,7 @@ class Signup(Resource):
             db.session.rollback()
             return error_response("Username is already taken.", 409)
 
-        return authentication_response(user, 201)
+        return establish_session(user), 201
 
 
 class Login(Resource):
@@ -85,7 +70,7 @@ class Login(Resource):
         if not user or not user.authenticate(password):
             return error_response("Invalid username or password.", 401)
 
-        return authentication_response(user, 200)
+        return establish_session(user), 200
 
 
 class CheckSession(Resource):
@@ -104,29 +89,7 @@ class CheckSession(Resource):
         return user.to_dict(), 200
 
 
-class Me(Resource):
-    @jwt_required()
-    def get(self):
-        user_id = get_jwt_identity()
-        user = db.session.get(User, int(user_id))
-
-        if not user:
-            return error_response("User not found.", 404)
-
-        return user.to_dict(), 200
-
-
 class Logout(Resource):
-    @jwt_required(optional=True)
     def delete(self):
-        token_data = get_jwt()
-
-        if token_data and token_data.get("jti"):
-            revoked_token = TokenBlocklist(jti=token_data["jti"])
-            db.session.add(revoked_token)
-            db.session.commit()
-        elif not session.get("user_id"):
-            return error_response("Authentication required.", 401)
-
         session.clear()
         return {}, 204

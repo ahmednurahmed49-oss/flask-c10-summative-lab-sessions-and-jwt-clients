@@ -2,14 +2,9 @@
 
 ## Description
 
-A Flask application with user registration, authentication, and personal expense management.
+A personal expense tracker built with a Flask REST API and a React frontend.
 
-The backend supports two authentication methods:
-
-- JWT authentication for protected expense API operations.
-- Flask sessions for session-based login and session checking.
-
-Each user can only access their own expenses.
+The backend uses Flask sessions for authentication and SQLAlchemy for database-backed expense management. Each authenticated user can access only their own expenses.
 
 ## Technologies
 
@@ -19,7 +14,6 @@ Each user can only access their own expenses.
 - Flask-SQLAlchemy
 - Flask-Migrate
 - Flask-Bcrypt
-- Flask-JWT-Extended
 - SQLite
 - Pipenv
 - React
@@ -28,34 +22,30 @@ Each user can only access their own expenses.
 
 - User registration and login
 - Bcrypt password hashing
-- JWT access tokens
 - Flask session authentication
-- Current-user endpoint
-- Expense CRUD operations
-- Pagination
+- Session checking and logout
+- Database-backed expense CRUD operations
 - User-specific expense access
-- Input validation
+- Expense input validation
+- Expense pagination
 - Database migrations
 - Sample seed data
+- Automated backend tests
 
 ## Project Structure
 
-- `server/` - Flask backend and API
-- `client-with-jwt/` - JWT-based React frontend
+- `server/` - Flask backend, API routes, models, migrations, and tests
 - `client-with-sessions/` - Session-based React frontend
 
 ## Installation
 
-Install the backend dependencies from the project root:
+Install backend dependencies from the project root:
 
     pipenv install
 
-Install frontend dependencies separately:
+Install frontend dependencies:
 
-    cd client-with-jwt
-    npm ci
-
-    cd ../client-with-sessions
+    cd client-with-sessions
     npm ci
 
 ## Database Setup
@@ -65,7 +55,7 @@ From the project root:
     cd server
     pipenv run flask --app app db upgrade
 
-The application uses SQLite by default.
+SQLite is used by default.
 
 You can configure another database using the `DATABASE_URL` environment variable.
 
@@ -94,51 +84,62 @@ The API runs at:
 
     http://localhost:5555
 
+## Run the Frontend
+
+Open another terminal:
+
+    cd ~/flask-c10-summative-lab-sessions-and-jwt-clients/client-with-sessions
+    npm start
+
+The React development server uses the backend proxy at:
+
+    http://localhost:5555
+
 ## Authentication
 
-### JWT authentication
+Authentication uses Flask sessions. Successful signup and login establish a session using a session cookie.
 
-Signup and login return a user object and a JWT access token.
+The frontend must send requests with credentials enabled when communicating with the backend.
 
-Send the token with protected requests:
-
-    Authorization: Bearer YOUR_ACCESS_TOKEN
-
-Access tokens expire after one hour.
-
-### Session authentication
-
-Signup and login also establish a Flask session.
-
-The session endpoints allow a client to check the currently authenticated user and log out.
-
-The session-based frontend uses these authentication endpoints. Its expense entries are maintained in frontend state; it does not use the backend expense CRUD endpoints.
-
-## Authentication Endpoints
+### Authentication Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/signup` | Register a user and establish authentication |
-| POST | `/login` | Authenticate a user |
-| GET | `/check_session` | Check the current Flask session |
-| GET | `/me` | Get the JWT-authenticated user |
-| DELETE | `/logout` | End the session and/or revoke the current JWT |
+| POST | `/signup` | Register a user and establish a session |
+| POST | `/login` | Authenticate a user and establish a session |
+| GET | `/check_session` | Check the current session |
+| DELETE | `/logout` | Clear the current session |
 
-## Expense Endpoints
+### Signup Request
 
-All expense endpoints require JWT authentication.
+    {
+      "username": "alice",
+      "password": "AlicePass123!",
+      "password_confirmation": "AlicePass123!"
+    }
+
+### Login Request
+
+    {
+      "username": "alice",
+      "password": "AlicePass123!"
+    }
+
+## Expense API
+
+All expense endpoints require an authenticated Flask session.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/expenses` | List expenses with pagination |
+| GET | `/expenses` | List the current user's expenses |
 | POST | `/expenses` | Create an expense |
-| GET | `/expenses/<id>` | Retrieve one expense |
-| PATCH | `/expenses/<id>` | Update an expense |
-| DELETE | `/expenses/<id>` | Delete an expense |
+| GET | `/expenses/<id>` | Retrieve one of the user's expenses |
+| PATCH | `/expenses/<id>` | Update one of the user's expenses |
+| DELETE | `/expenses/<id>` | Delete one of the user's expenses |
 
-Users can only retrieve, update, or delete their own expenses.
+Users cannot access expenses belonging to other users.
 
-## Create an Expense
+### Create an Expense
 
 Send a POST request to `/expenses` with a JSON body:
 
@@ -149,9 +150,9 @@ Send a POST request to `/expenses` with a JSON body:
       "date": "2026-11-05"
     }
 
-The date is optional. If omitted, the current date is used.
+The date is optional. If omitted, the model uses its configured default.
 
-## Pagination
+### Pagination
 
 Use query parameters:
 
@@ -168,6 +169,8 @@ The response includes:
 - `per_page`
 - `total`
 - `pages`
+
+Note: The current React frontend's expense entries are managed in frontend state. The backend expense API supports database persistence, but the frontend expense interface still needs to be connected to these endpoints for expenses to persist through the UI.
 
 ## Data Models
 
@@ -187,34 +190,17 @@ The response includes:
 - `date`
 - `user_id`
 
-### TokenBlocklist
-
-Stores revoked JWT identifiers so logged-out tokens cannot be reused.
-
 ## Validation and Security
 
 - Usernames cannot be empty and must be unique.
 - Signup passwords require at least eight characters.
 - Passwords are hashed using Bcrypt.
 - Password hashes are not exposed through API responses.
-- Expense endpoints require a valid JWT.
+- Expense endpoints require an authenticated session.
 - Users cannot access another user's expenses.
 - Expense amounts must be greater than zero.
 - Dates must use `YYYY-MM-DD` format.
 - Pagination is limited to 100 records per page.
-- Revoked JWTs are checked against the token blocklist.
-
-## Running the Frontends
-
-Build either frontend from its own directory:
-
-    npm run build
-
-For local development, start the backend on port 5555 and run the chosen React client using:
-
-    npm start
-
-Both frontend projects have a development proxy configured for the backend at `http://localhost:5555`.
 
 ## Running Backend Tests
 
@@ -223,16 +209,4 @@ From the project root:
     cd server
     pipenv run pytest -v
 
-The test suite covers authentication, session handling, expense CRUD, validation, pagination, and user ownership.
-
-## Database Migrations
-
-From the `server` directory:
-
-Create a migration after changing models:
-
-    pipenv run flask --app app db migrate -m "describe your changes"
-
-Apply migrations:
-
-    pipenv run flask --app app db upgrade
+The tests cover authentication, password hashing, expense CRUD, pagination, validation, and user-specific access restrictions.
