@@ -4,45 +4,134 @@ import Login from "../pages/Login";
 
 function App() {
   const [user, setUser] = useState(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
+
   const [page, setPage] = useState("Dashboard");
   const [expenses, setExpenses] = useState([]);
+
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Food");
 
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // Check whether the user already has an active session.
   useEffect(() => {
-    fetch("/check_session")
-      .then((r) => r.json())
-      .then((data) => setUser(data.id ? data : null))
-      .catch(() => setUser(null));
+    fetch("/check_session", {
+      credentials: "same-origin",
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Could not check login session.");
+        }
+
+        return response.json();
+      })
+      .then((data) => {
+        setUser(data.id ? data : null);
+      })
+      .catch(() => {
+        setUser(null);
+      })
+      .finally(() => {
+        setSessionChecked(true);
+      });
   }, []);
 
-  if (!user) return <Login onLogin={setUser} />;
+  // Load the logged-in user's expenses from the database.
+  useEffect(() => {
+    if (!user) {
+      setExpenses([]);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    fetch("/expenses?per_page=100", {
+      credentials: "same-origin",
+    })
+      .then(async (response) => {
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.errors?.[0] || "Could not load expenses."
+          );
+        }
+
+        return data;
+      })
+      .then((data) => {
+        setExpenses(data.expenses || []);
+      })
+      .catch((err) => {
+        setError(err.message);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [user]);
+
+  if (!sessionChecked) {
+    return <p style={{ padding: "30px" }}>Checking session...</p>;
+  }
+
+  if (!user) {
+    return <Login onLogin={setUser} />;
+  }
 
   const total = expenses.reduce(
-    (sum, expense) => sum + expense.amount,
+    (sum, expense) => sum + Number(expense.amount),
     0
   );
 
-  function addExpense(e) {
+  // Save a new expense through the Flask API.
+  async function addExpense(e) {
     e.preventDefault();
+    setError("");
 
-    if (!description.trim() || Number(amount) <= 0) return;
+    if (!description.trim() || Number(amount) <= 0) {
+      setError("Enter a valid description and amount.");
+      return;
+    }
 
-    setExpenses([
-      ...expenses,
-      {
-        id: Date.now(),
-        description,
-        amount: Number(amount),
-        category,
-      },
-    ]);
+    try {
+      const response = await fetch("/expenses", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: description.trim(),
+          amount: Number(amount),
+          category,
+        }),
+      });
 
-    setDescription("");
-    setAmount("");
-    setCategory("Food");
-    setPage("Expenses");
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.errors?.[0] || "Could not save expense."
+        );
+      }
+
+      // Add the database record returned by Flask.
+      setExpenses((previousExpenses) => [
+        data,
+        ...previousExpenses,
+      ]);
+
+      setDescription("");
+      setAmount("");
+      setCategory("Food");
+      setPage("Expenses");
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   const navStyle = {
@@ -75,6 +164,18 @@ function App() {
       </nav>
 
       <main style={{ padding: "30px", maxWidth: "1100px", margin: "auto" }}>
+        {error && (
+          <div
+            style={{
+              ...cardStyle,
+              color: "#b91c1c",
+              background: "#fee2e2",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
         {page === "Dashboard" && (
           <>
             <h1>Expense Tracker Dashboard</h1>
@@ -90,7 +191,10 @@ function App() {
               <h1>{expenses.length}</h1>
             </div>
 
-            <button style={navStyle} onClick={() => setPage("Add Expense")}>
+            <button
+              style={navStyle}
+              onClick={() => setPage("Add Expense")}
+            >
               + Add New Expense
             </button>
           </>
@@ -99,14 +203,20 @@ function App() {
         {page === "Expenses" && (
           <>
             <h1>My Expenses</h1>
-            {expenses.length === 0 ? (
+
+            {loading ? (
+              <p>Loading expenses...</p>
+            ) : expenses.length === 0 ? (
               <p>No expenses recorded yet.</p>
             ) : (
               expenses.map((expense) => (
                 <div key={expense.id} style={cardStyle}>
-                  <strong>{expense.description}</strong>
-                  <p>{expense.category}</p>
-                  <h3>KSh {expense.amount.toLocaleString()}</h3>
+                  <strong>{expense.title}</strong>
+                  <p>{expense.category || "Uncategorized"}</p>
+                  <h3>
+                    KSh {Number(expense.amount).toLocaleString()}
+                  </h3>
+                  <small>{expense.date}</small>
                 </div>
               ))
             )}
@@ -116,6 +226,7 @@ function App() {
         {page === "Add Expense" && (
           <>
             <h1>Add New Expense</h1>
+
             <form onSubmit={addExpense} style={cardStyle}>
               <p>Description</p>
               <input
@@ -152,6 +263,7 @@ function App() {
               </select>
 
               <br /><br />
+
               <button type="submit" style={navStyle}>
                 Save Expense
               </button>
@@ -162,6 +274,7 @@ function App() {
         {page === "Profile" && (
           <>
             <h1>My Profile</h1>
+
             <div style={cardStyle}>
               <h3>Account Information</h3>
               <p>Username: {user.username}</p>
