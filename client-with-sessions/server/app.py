@@ -39,8 +39,7 @@ def signup():
     if not password:
         errors.append("Password is required.")
 
-    if not password.strip():
-        errors.append("Password cannot be empty.")
+    
 
     if password != password_confirmation:
         errors.append("Passwords do not match.")
